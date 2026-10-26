@@ -18,10 +18,26 @@ class ScanError(Exception):
 
 
 def run_scan_sync(payload: dict) -> dict:
+    """依 AGENT_BACKEND 選擇後端：argus-agent（自家 LLM 多代理，預設）或 strix（CLI）。
+
+    兩個後端回傳同一結構（status／steps／total_tokens／summary／error／*_count／findings），
+    對外 /scan 契約一致，Argus 端無感。
+    """
+    from django.conf import settings
+
+    backend = getattr(settings, "AGENT_BACKEND", "argus-agent")
+    if backend == "strix":
+        from strix_backend.runner import run_strix_scan
+
+        return run_strix_scan(payload)
+    return _run_argus_agent(payload)
+
+
+def _run_argus_agent(payload: dict) -> dict:
     from django.conf import settings
 
     from agent.runner import run_agent_for_scan
-    from scans.models import Finding, Page, ScanJob
+    from scans.models import Page, ScanJob
     from scans.services import PublicScanTargetError, assert_public_http_url, get_origin
 
     mode = payload.get("mode", "both")

@@ -104,6 +104,46 @@ docker run -p 8000:8000 --env-file .env argus-agent
 
 時間權衡：預設每位專家 30 步，一次深度掃描最壞約 `20×2 + 6×30 = 220` 步。調大 `ARGUS_AGENT_SPECIALIST_MAX_STEPS` 更能組出多步攻擊鏈（登入→枚舉→越權→驗證常要 15–25 步），調小更快但深的鏈狀漏洞可能來不及做完。
 
+## 掃描後端（argus-agent / Strix）
+
+同一條 `POST /scan` 契約可由不同引擎實作，用環境變數 `AGENT_BACKEND` 切換，**呼叫端（Argus）無感**：
+
+| `AGENT_BACKEND` | 引擎 | 說明 |
+|---|---|---|
+| `argus-agent`（預設） | 自家 LLM 多代理 | recon→指揮官→專家＋UX，資安與 UX 都做 |
+| `strix` | [usestrix/strix](https://github.com/usestrix/strix) CLI | 只做資安滲透（無 UX）；`mode=ux` 回空結果 |
+
+### Strix backend
+
+Strix 是開源的自動化 AI 滲透測試器，**只有 CLI＋Docker、沒有 REST API**。本服務的 `strix_backend/`
+把它包成同一條契約：叫起 `strix -n --target <url> [--instruction …]`、解析 `strix_runs/<run>/vulnerabilities.json`、
+映射成契約的 finding（severity 五級、CVSS→priority_score、CWE、target→url；Strix 不提供 OWASP 分類，留空）。
+
+啟用步驟（在 host 上）：
+
+```bash
+# 1. 安裝 strix 並確保 Docker 可用（strix 會在 Docker sandbox 內跑）
+pipx install strix-agent          # 依 strix 官方說明
+# 2. 設定 strix 自己的 LLM（擇一）
+export STRIX_LLM=openrouter/z-ai/glm-5.3
+export LLM_API_KEY=...            # 或 `strix auth login`
+# 3. 切換本服務後端
+export AGENT_BACKEND=strix
+uvicorn api.app:app --host 0.0.0.0 --port 8000
+```
+
+| 變數 | 說明 | 預設 |
+|---|---|---|
+| `AGENT_BACKEND` | `argus-agent`（預設）或 `strix` | argus-agent |
+| `STRIX_BIN` | strix 執行檔路徑 | strix |
+| `STRIX_TIMEOUT` | 單次掃描逾時（秒） | 3600 |
+| `STRIX_EXTRA_ARGS` | 額外傳給 strix 的參數（空白分隔） | — |
+| `STRIX_LLM` / `LLM_API_KEY` / `LLM_API_BASE` | strix 自身的 LLM 設定（由 strix 讀取） | — |
+
+> 授權：`strix` 偏主動攻擊，本 backend 強制 `authorized=true` 才跑；`submit_forms=false` 時以 instruction
+> 要求 strix 不做破壞性寫入。送攻擊流量前仍請確定你擁有或已獲授權掃描該目標。
+> Docker-in-Docker：以容器部署本服務要跑 strix backend 時，需讓容器能存取 Docker（掛 socket 或 DinD）。
+
 ## 限制
 
 - **Kali／sqlmap 主動驗證**在獨立服務是停用 stub（Argus 版需整套 Kubernetes 控制平面）；要接自己的後端，替換 `scans/security/kali_tools.py` 的 `run_sqlmap`（回傳同樣 dict 契約）。
