@@ -1,0 +1,7 @@
+Django>=5.0,<5.2
+asgiref>=3.8,<4
+playwright==1.47.0
+requests>=2.32,<3
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.30,<0.31
+pydantic>=2.7,<3
