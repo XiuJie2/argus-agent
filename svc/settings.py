@@ -49,6 +49,18 @@ ARGUS_AGENT_MAX_TOKENS = _env_int("ARGUS_AGENT_MAX_TOKENS", 60000)
 ARGUS_AGENT_UX_MAX_TOKENS = _env_int("ARGUS_AGENT_UX_MAX_TOKENS", 120000)
 ARGUS_AGENT_STEP_TIMEOUT = _env_int("ARGUS_AGENT_STEP_TIMEOUT", 30)
 
+# ---- 掃描後端選擇 ----
+# argus-agent＝自家 LLM 多代理引擎（預設）；strix＝改用 usestrix/strix CLI（只做資安滲透）。
+# 兩者對外都講同一條 POST /scan 契約，Argus 端無感。
+AGENT_BACKEND = os.getenv("AGENT_BACKEND", "argus-agent").strip().lower()
+
+# ---- Strix backend 參數（AGENT_BACKEND=strix 時才用）----
+# strix 本體是 CLI＋Docker（需在 host 安裝 strix 並讓 Docker 可用）；它自己讀
+# STRIX_LLM／LLM_API_KEY／LLM_API_BASE 等環境變數，本服務只負責叫起它並解析其 strix_runs 輸出。
+STRIX_BIN = os.getenv("STRIX_BIN", "strix")
+STRIX_TIMEOUT = _env_int("STRIX_TIMEOUT", 3600)
+STRIX_EXTRA_ARGS = [a for a in os.getenv("STRIX_EXTRA_ARGS", "").split() if a]
+
 # ---- 掃描器身分與網路 ----
 ARGUS_SCANNER_USER_AGENT = os.getenv(
     "ARGUS_SCANNER_USER_AGENT",
