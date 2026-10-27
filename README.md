@@ -140,6 +140,8 @@ uvicorn api.app:app --host 0.0.0.0 --port 8000
 | `STRIX_EXTRA_ARGS` | 額外傳給 strix 的參數（空白分隔） | — |
 | `STRIX_LLM` / `LLM_API_KEY` / `LLM_API_BASE` | strix 自身的 LLM 設定（由 strix 讀取） | — |
 
+完整部署範例（Dockerfile＋compose＋Docker sandbox 三種接法＋安全注意）見 [`deploy/strix/`](deploy/strix/README.md)。
+
 > 授權：`strix` 偏主動攻擊，本 backend 強制 `authorized=true` 才跑；`submit_forms=false` 時以 instruction
 > 要求 strix 不做破壞性寫入。送攻擊流量前仍請確定你擁有或已獲授權掃描該目標。
 > Docker-in-Docker：以容器部署本服務要跑 strix backend 時，需讓容器能存取 Docker（掛 socket 或 DinD）。

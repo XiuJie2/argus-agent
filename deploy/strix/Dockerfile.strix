@@ -1,0 +1,33 @@
+# Strix 版 argus-agent：以 usestrix/strix CLI 當後端（AGENT_BACKEND=strix）。
+#
+# 與根目錄 Dockerfile 的差別：
+#  - 不下載 Playwright 瀏覽器（Strix 後端用不到，省體積）。
+#  - 裝 docker CLI 與 strix；strix 會在「Docker sandbox」裡跑目標，所以容器內要有 docker
+#    指令，且執行時要掛到一個可用的 Docker daemon（見 docker-compose.strix.yml 的 socket 掛載）。
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DJANGO_SETTINGS_MODULE=svc.settings \
+    AGENT_BACKEND=strix \
+    PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /app
+
+# docker.io 提供 docker 用戶端（我們只用 client 連外部 daemon）；pipx 用來裝隔離的 strix。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io git pipx ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# 只裝 Python 相依（含 playwright 套件本身），不跑 `playwright install`（Strix 後端不開瀏覽器）
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 安裝 strix（依官方套件名；若官方改名，改這一行即可）。strix 自身於 Docker sandbox 內執行。
+RUN pipx install strix-agent
+
+COPY . .
+
+EXPOSE 8000
+# 啟動時 lifespan 會完成 Django setup 並建表（SQLite 暫存）
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]

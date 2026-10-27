@@ -1,0 +1,31 @@
+# Strix 版 argus-agent 部署範例。
+#
+# 用法（在本資料夾）：
+#   cp .env.strix.example .env.strix   # 填 LLM_API_KEY 等
+#   docker compose -f docker-compose.strix.yml up -d --build
+#   curl http://localhost:8000/health   # → {"ok":true}
+#
+# 之後在「Argus」那端設：
+#   ARGUS_AGENT_ENABLED=true
+#   ARGUS_AGENT_SERVICE_URL=http://<本服務host>:8000
+#   ARGUS_AGENT_SERVICE_TIMEOUT=1800
+# Argus 端設定與自家引擎版完全相同——差別只在本服務 AGENT_BACKEND=strix。
+services:
+  argus-agent-strix:
+    build:
+      context: ../..                      # repo 根目錄
+      dockerfile: deploy/strix/Dockerfile.strix
+    image: argus-agent-strix:latest
+    container_name: argus-agent-strix
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.strix
+    environment:
+      AGENT_BACKEND: strix
+    volumes:
+      # strix 會叫起 Docker sandbox 跑目標 → 容器內的 docker 要連到一個 daemon。
+      # 最簡單：掛主機的 docker.sock，strix 的 sandbox 會以「sibling 容器」在主機上啟動。
+      # ⚠️ 掛 docker.sock 等於把主機 root 權限給這個容器，務必只在可信主機、私有網路使用。
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
