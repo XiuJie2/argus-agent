@@ -1,0 +1,24 @@
+# argus-agent：自家多代理 AI 滲透/UX 測試服務，對 Argus 講 agent-service 契約（取代 strix wrapper）。
+# 安裝：
+#   sudo cp deploy/systemd/argus-agent.service /etc/systemd/system/
+#   sudo cp deploy/systemd/argus-agent.env.example /etc/argus-agent.env   # 填入 LLM 金鑰
+#   sudo chmod 600 /etc/argus-agent.env
+#   sudo systemctl daemon-reload && sudo systemctl enable --now argus-agent
+#   curl -s http://127.0.0.1:8100/healthz
+[Unit]
+Description=Argus AI Agent Service (native multi-agent engine)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+# User 需能存取已安裝的 Playwright Chromium（playwright install chromium 的快取目錄）。
+User=root
+WorkingDirectory=/home/jie/Project/argus-agent
+EnvironmentFile=/etc/argus-agent.env
+# 單 worker：run 狀態存記憶體、SQLite 暫存，多 worker 不共享。
+ExecStart=/home/jie/Project/argus-agent/.venv/bin/uvicorn api.app:app --host 0.0.0.0 --port 8100
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

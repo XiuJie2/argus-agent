@@ -141,7 +141,7 @@ def _run_argus_agent(payload: dict, *, cancel_event=None, on_event=None) -> dict
             "total_tokens": (result.total_tokens if result else 0),
             "summary": redact((result.final_summary if result else "") or "",
                               extra_secrets=secrets, max_len=None),
-            "error": (result.error if result else "no_result") if status == "error" else "",
+            "error": ((result.error if result else "no_result") if status != "completed" else ""),
             "ux_issue_count": sum(1 for f in findings if f["category"] == "ux"),
             "security_finding_count": sum(1 for f in findings if f["category"] == "security"),
             "findings": findings,
@@ -160,14 +160,24 @@ def _run_argus_agent(payload: dict, *, cancel_event=None, on_event=None) -> dict
 
 
 def _map_status(result) -> str:
-    """AgentRunResult → 契約 status。沒跑起來＝error；完成＝completed；其餘（含步數/預算
-    用盡提早收尾）＝partial，讓上游不把它當成完整驗證。"""
+    """AgentRunResult → 契約 status。
+
+    - 沒跑起來（None）＝error。
+    - status=completed ＝ completed。
+    - 步數／token 預算截斷（max_steps_reached／token_budget_exceeded）＝ partial：跑了但沒
+      跑完整，有抓到的都保留，上游不可當成完整驗證。
+    - 其餘失敗（provider 錯誤／例外）且零產出 ＝ error；否則保守 partial。
+    """
     if result is None:
         return "error"
-    if getattr(result, "status", "") == "completed":
+    status = getattr(result, "status", "")
+    err = str(getattr(result, "error", "") or "")
+    if status == "completed":
         return "completed"
-    if getattr(result, "error", "") and not getattr(result, "security_findings", None) \
-            and not getattr(result, "issues", None):
+    if err.startswith(("max_steps_reached", "token_budget_exceeded")):
+        return "partial"
+    has_output = bool(getattr(result, "security_findings", None) or getattr(result, "issues", None))
+    if err and not has_output:
         return "error"
     return "partial"
 

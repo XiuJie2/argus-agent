@@ -37,7 +37,9 @@ _RESULT_STATUS = {"succeeded": "completed", "partial": "partial",
 async def lifespan(app: FastAPI):
     from svc.bootstrap import setup
 
-    setup()
+    # setup() 會跑 Django migrate（同步 ORM）；lifespan 在事件迴圈內，直接呼叫會觸發
+    # SynchronousOnlyOperation。丟到 thread 執行，避開 async 上下文。
+    await asyncio.to_thread(setup)
     yield
 
 
