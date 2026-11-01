@@ -433,7 +433,7 @@ SPECIALIST_ROLES: dict[str, dict[str, str]] = {
 ORCHESTRATOR_PROMPT = """你是滲透測試指揮官。先遣偵察 agent 已完成對目標 {origin} 的初步測試，
 以下是它的情報。你的工作：用 dispatch_specialist 派專家進行深入測試——
 你可以根據每位專家回報的結果決定是否追加其他專家，全部滿意後 finish。
-
+{prior_block}
 【偵察總結】
 {recon_summary}
 
@@ -465,7 +465,7 @@ ORCHESTRATOR_PROMPT = """你是滲透測試指揮官。先遣偵察 agent 已完
   成立的角色，至少派過一次；跳過任何條件成立的角色＝該攻擊面
   完全沒測，屬排程缺口。recon 曾做過的單點探測（如 SQLi）不等于
   對應角色的完整面相已覆蓋。
-- 完成調度後 finish 附總結。"""
+- 完成調度後 finish 附總結。{operator_focus}"""
 
 
 def _origin_key(url: str) -> tuple[str, str, int | None]:
@@ -532,6 +532,39 @@ async def _make_agent_context(browser, origin: str):
     return context
 
 
+def _build_prior_block(prior: list[dict] | None) -> str:
+    """PHASE 1（回歸先行）指令：先重測同站歷次發現，再探索新問題。
+
+    仍在的 → 派專家重測並重新回報（report_security_issue）；確認已修復的 → 回報一筆
+    title 為「RESOLVED: <原標題>」的 report_security_issue（severity=info），讓上游據此消解。
+    對不上就不要亂報 RESOLVED。沒有 prior 時回空字串（維持原行為）。
+    """
+    rows: list[str] = []
+    seen: set[str] = set()
+    for f in prior or []:
+        title = str(f.get("title") or "").strip()
+        if not title or title in seen:
+            continue
+        seen.add(title)
+        sev = str(f.get("severity") or "").strip()
+        ep = str(f.get("endpoint") or "").strip()
+        rows.append(f"- [{sev}] {title}" + (f"（{ep}）" if ep else ""))
+        if len(rows) >= 40:
+            break
+    if not rows:
+        return ""
+    listing = "\n".join(rows)
+    return (
+        "\n【PHASE 1 — 回歸先行（在探索新問題之前，優先把預算花在這裡）】\n"
+        "以下是同站歷次掃描找到的問題。請**先**派專家逐一重測：\n"
+        f"{listing}\n"
+        "規則：仍可利用的，派專家重測並照常 report_security_issue（重報仍在的問題是預期行為、"
+        "不是重複）。你實測**確認已修復、打不動**的，報一筆 report_security_issue，title 寫"
+        "『RESOLVED: 』接上該問題的原標題（severity=info）——只在真的驗證過已修復時才報，"
+        "對不上或沒把握就別報 RESOLVED。回歸這輪做完，再用剩餘預算做下面的新探索。\n"
+    )
+
+
 def _summarize_known_findings(known: list[dict] | None) -> str:
     """確定性工具已找到的資安問題摘要（給 orchestrator，叫它別重報）。
 
@@ -591,6 +624,8 @@ async def run_agent_for_scan(
     recon_intel: list[str] | None = None,
     may_submit_forms: bool = False,
     known_findings: list[dict] | None = None,
+    prior_findings: list[dict] | None = None,
+    instruction: str = "",
     progress_cb: Callable[[str, int], None] | None = None,
     run_ux: bool = False,
 ) -> AgentRunResult | None:
@@ -825,6 +860,11 @@ async def run_agent_for_scan(
         ]
         orchestrator_prompt = ORCHESTRATOR_PROMPT.format(
             origin=scan_job.origin,
+            prior_block=_build_prior_block(prior_findings),
+            operator_focus=(
+                f"\n- 本次操作者聚焦（最高權重）：{instruction.strip()}"
+                if instruction and instruction.strip() else ""
+            ),
             recon_summary=(recon_result.final_summary or "（無）")[:1500],
             findings_list=("\n".join(f"- {t}" for t in findings_titles) or "（無）"),
             deterministic_findings=_summarize_known_findings(known_findings),

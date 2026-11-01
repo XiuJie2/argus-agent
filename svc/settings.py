@@ -54,6 +54,11 @@ ARGUS_AGENT_STEP_TIMEOUT = _env_int("ARGUS_AGENT_STEP_TIMEOUT", 30)
 # 兩者對外都講同一條 POST /scan 契約，Argus 端無感。
 AGENT_BACKEND = os.getenv("AGENT_BACKEND", "argus-agent").strip().lower()
 
+# 服務 Bearer 金鑰：設定後所有 /scan、/v1/scans* 端點都要帶相符的 Authorization: Bearer <key>。
+# 空字串＝不啟用驗證（僅限受信任內網／本機；正式部署務必設定）。
+SERVICE_API_KEY = os.getenv("ARGUS_AGENT_SERVICE_KEY", "").strip()
+
+
 # ---- Strix backend 參數（AGENT_BACKEND=strix 時才用）----
 # strix 本體是 CLI＋Docker（需在 host 安裝 strix 並讓 Docker 可用）；它自己讀
 # STRIX_LLM／LLM_API_KEY／LLM_API_BASE 等環境變數，本服務只負責叫起它並解析其 strix_runs 輸出。
